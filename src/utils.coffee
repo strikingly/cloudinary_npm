@@ -50,47 +50,6 @@ textStyle = (layer)->
     keywords.unshift(font_family)
     _.compact(keywords).join("_")
 
-# Parse layer options
-# @return [string] layer transformation string
-# @private
-process_layer = (layer)->
-  if _.isPlainObject(layer)
-    public_id = layer["public_id"]
-    format = layer["format"]
-    resource_type = layer["resource_type"] || "image"
-    type = layer["type"] || "upload"
-    text = layer["text"]
-    style = null
-    components = []
-
-    unless _.isEmpty(public_id)
-      public_id = public_id.replace(new RegExp("/", 'g'), ":")
-      public_id = "#{public_id}.#{format}" if format?
-
-    if _.isEmpty(text) && resource_type != "text"
-      if _.isEmpty(public_id)
-        throw "Must supply public_id for resource_type layer_parameter"
-      if resource_type == "subtitles"
-        style = textStyle(layer)
-
-    else
-      resource_type = "text"
-      type = null
-      # // type is ignored for text layers
-      style = textStyle(layer)
-      unless _.isEmpty(text)
-        unless _.isEmpty(public_id) ^ _.isEmpty(style)
-          throw "Must supply either style parameters or a public_id when providing text parameter in a text overlay/underlay"
-        text = smart_escape(text.replace(new RegExp("[,/]", 'g'), (c)-> "%#{c.charCodeAt(0).toString(16).toUpperCase()}"))
-
-    components.push(resource_type) if resource_type != "image"
-    components.push(type) if type != "upload"
-    components.push(style)
-    components.push(public_id)
-    components.push(text)
-    layer = _.compact(components).join(":")
-  layer
-
 exports.build_upload_params = (options) ->
   params =
     timestamp: exports.timestamp()
@@ -238,9 +197,6 @@ exports.generate_transformation_string = (options) ->
   if options["offset"]?
     [options["start_offset"], options["end_offset"]] = split_range(utils.option_consume(options, "offset"))
 
-  overlay = process_layer(utils.option_consume(options, "overlay"))
-  underlay = process_layer(utils.option_consume(options, "underlay"))
-
   params =
     a: angle
     b: background
@@ -251,9 +207,7 @@ exports.generate_transformation_string = (options) ->
     e: effect
     fl: flags
     h: height
-    l: overlay
     t: named_transformation
-    u: underlay
     w: width
 
   simple_params =
@@ -287,8 +241,13 @@ exports.generate_transformation_string = (options) ->
   params["vc"] = process_video_params(params["vc"]) if params["vc"]?
   for range_value in ["so", "eo", "du"]
     params[range_value] = norm_range_value(params[range_value]) if range_value of params
-
-  params = _.sortBy([key, value] for key, value of params, (key, value) -> key)
+  
+  # don't sort since we dont care
+  params = _.reduce(params, (a, v, k) =>
+    a.push([k, v])
+    return a
+  , [])
+  # params = _.sortBy([key, value] for key, value of params, (key, value) -> key)
   params.push [utils.option_consume(options, "raw_transformation")]
   transformations = (param.join("_") for param in params when utils.present(_.last(param))).join(",")
   base_transformations.push transformations
